@@ -92,21 +92,6 @@ namespace util {
         return std::nullopt;
     }
 
-    static void printBytes (const std::vector<std::byte>& bytes) {
-	    std::cout << std::hex;
-	    for (std::byte byte : bytes) {
-		    std::cout << static_cast<int>(byte) << ' ';
-	    }
-	    std::cout << std::dec << '\n';
-    }
-
-    static void printCharacters (const std::vector<std::byte>& bytes) {
-	    for (std::byte byte : bytes) {
-		    std::cout << static_cast<char>(byte);
-	    }
-	    std::cout << '\n';
-    }
-
     static char nibbleToChar (std::byte value) {
         if (value <= std::byte(9)) {
             return '0' + static_cast<char>(value);
