@@ -14,13 +14,12 @@
 
 #include <FileHelper.hpp>
 
-struct EditFlags {
-    bool partial_write;
+namespace Helix::File {
+    struct EditFlags {
+        bool partial_write;
 
-    explicit EditFlags (bool t_partial_write=true) : partial_write(t_partial_write) {}
-};
-
-namespace File {
+        explicit EditFlags (bool t_partial_write=true) : partial_write(t_partial_write) {}
+    };
     struct OpenFlags {
         bool write;
 
@@ -131,4 +130,4 @@ namespace File {
 
         size_t getSize ();
     };
-} // namespace File
+} // namespace helix

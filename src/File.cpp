@@ -1,6 +1,6 @@
 #include "File.hpp"
 
-using namespace File;
+using namespace Helix::File;
 
 /// Errors
 
@@ -73,28 +73,28 @@ void Constraint::clearErrorState () {
 }
 
 
-std::optional<Absolute> Constraint::convert_noThrow (Natural pos) const {
+std::optional<Helix::Absolute> Constraint::convert_noThrow (Helix::Natural pos) const {
     try {
-        Absolute value = convert(pos);
+        Helix::Absolute value = convert(pos);
         return value;
     } catch (...) {
         return std::nullopt;
     }
 }
 
-Absolute Constraint::convert (Natural pos) const {
-    GeneralPosition i_pos = static_cast<GeneralPosition>(pos);
+Helix::Absolute Constraint::convert (Helix::Natural pos) const {
+    Helix::GeneralPosition i_pos = static_cast<Helix::GeneralPosition>(pos);
     if (start.has_value()) {
-        i_pos += static_cast<GeneralPosition>(start.value());
+        i_pos += static_cast<Helix::GeneralPosition>(start.value());
     }
 
     if (end.has_value()) {
-        if (i_pos >= static_cast<GeneralPosition>(end.value())) {
+        if (i_pos >= static_cast<Helix::GeneralPosition>(end.value())) {
             throw PositionRangeError("Natural position was outside of range.");
         }
     }
 
-    return Absolute(i_pos);
+    return Helix::Absolute(i_pos);
 }
 
 bool Constraint::isValidAbsolute (Absolute pos) const {
@@ -199,6 +199,6 @@ size_t Constraint::getSize () {
     return file.getSize();
 }
 
-Absolute Constraint::getConstrainedValue (Natural pos) const {
+Helix::Absolute Constraint::getConstrainedValue (Natural pos) const {
     return convert(pos);
 }

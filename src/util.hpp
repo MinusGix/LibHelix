@@ -7,7 +7,7 @@
 #include <map>
 #include <cstddef>
 
-namespace util {
+namespace Helix::util {
     namespace optional {
         template<typename T, typename Func>
         /// If opt does have a value, it returns that. If it does not, it returns func.
@@ -106,4 +106,4 @@ namespace util {
             return nullptr;
         }
     }
-} // namespace util
+} // namespace Helix::util

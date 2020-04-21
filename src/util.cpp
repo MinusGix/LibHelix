@@ -1,6 +1,6 @@
 #include "util.hpp"
 
-namespace util {
+namespace Helix::util {
 	char nibbleToChar (std::byte value) {
         if (value <= std::byte(9)) {
             return '0' + static_cast<char>(value);
