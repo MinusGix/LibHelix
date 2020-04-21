@@ -9,6 +9,7 @@
 #include <utility>
 #include <random>
 #include <array>
+#include <variant>
 
 #include "File.hpp"
 #include "types.hpp"
