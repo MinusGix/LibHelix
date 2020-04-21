@@ -599,6 +599,8 @@ namespace Helix {
         /// If this is false, then the temp file (in mem) can be written to, but it can't be saved.
         bool isWritable () const;
 
+        size_t getSize ();
+
         std::optional<std::byte> read (Natural position);
         std::vector<std::byte> read (Natural position, size_t amount);
 

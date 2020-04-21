@@ -48,6 +48,10 @@ namespace Helix {
 		return file.isWritable();
 	}
 
+	size_t Helix::getSize () {
+		return file.getSize();
+	}
+
 	std::optional<std::byte> Helix::read (Natural position) {
 		std::variant<std::byte, Natural> data = actions.readFromStorage(position);
 		if (std::holds_alternative<std::byte>(data)) {
