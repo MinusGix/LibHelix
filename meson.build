@@ -7,8 +7,6 @@ project(
 )
 
 srcs = [
-    'src/main.cpp',
-
     'src/File.cpp'
 ]
 
@@ -29,4 +27,4 @@ libhelix_dep = declare_dependency(
     dependencies : deps
 )
 
-executable('helix', sources : srcs, include_directories : incdir, dependencies : deps)
+#executable('helix', sources : srcs, include_directories : incdir, dependencies : deps)
