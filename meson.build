@@ -7,6 +7,7 @@ project(
 )
 
 srcs = [
+    'src/Helix.cpp',
     'src/File.cpp',
     'src/util.cpp'
 ]
