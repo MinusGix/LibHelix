@@ -128,6 +128,9 @@ namespace Helix::File {
         void insertion (Natural position, size_t amount, size_t chunk_size);
         void deletion (Natural position, size_t amount, size_t chunk_size);
 
+        /// Gets the entire file size
         size_t getSize ();
+        /// Gets the amount of data that can be edited
+        size_t getEditableSize ();
     };
 } // namespace helix

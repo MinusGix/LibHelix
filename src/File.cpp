@@ -199,6 +199,21 @@ size_t Constraint::getSize () {
     return file.getSize();
 }
 
+size_t Constraint::getEditableSize () {
+    if (start.has_value()) {
+        if (end.has_value()) {
+            return static_cast<size_t>(end.value()) - static_cast<size_t>(start.value());
+        } else {
+            return getSize() - static_cast<size_t>(start.value());
+        }
+    } else if (end.has_value()) {
+        // TODO: make sure this is correct
+        return static_cast<size_t>(end.value()) - 1;
+    } else {
+        return getSize();
+    }
+}
+
 Helix::Absolute Constraint::getConstrainedValue (Natural pos) const {
     return convert(pos);
 }
