@@ -51,6 +51,9 @@ namespace Helix {
 	size_t Helix::getSize () {
 		return file.getSize();
 	}
+	size_t Helix::getEditableSize () {
+		return file.getEditableSize();
+	}
 
 	std::optional<std::byte> Helix::read (Natural position) {
 		std::variant<std::byte, Natural> data = actions.readFromStorage(position);

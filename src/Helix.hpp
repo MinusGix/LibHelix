@@ -600,6 +600,7 @@ namespace Helix {
         bool isWritable () const;
 
         size_t getSize ();
+        size_t getEditableSize ();
 
         std::optional<std::byte> read (Natural position);
         std::vector<std::byte> read (Natural position, size_t amount);
