@@ -7,7 +7,8 @@ project(
 )
 
 srcs = [
-    'src/File.cpp'
+    'src/File.cpp',
+    'src/util.cpp'
 ]
 
 incdir = include_directories('include')

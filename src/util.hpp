@@ -4,8 +4,8 @@
 
 #include <optional>
 #include <functional>
-#include <iostream>
 #include <map>
+#include <cstddef>
 
 namespace util {
     namespace optional {
@@ -92,23 +92,10 @@ namespace util {
         return std::nullopt;
     }
 
-    static char nibbleToChar (std::byte value) {
-        if (value <= std::byte(9)) {
-            return '0' + static_cast<char>(value);
-        } else {
-            return 'A' + (static_cast<char>(value) - 10);
-        }
-    }
+    char nibbleToChar (std::byte value);
 
-    static std::pair<char, char> byteToString (std::byte value, bool padded) {
-        return {
-            nibbleToChar((value & std::byte(0xF0)) >> 4),
-            nibbleToChar((value & std::byte(0x0F)))
-        };
-    }
-    static std::pair<char, char> byteToString (std::byte value) {
-        return byteToString(value, false);
-    }
+    std::pair<char, char> byteToString (std::byte value, bool padded);
+    std::pair<char, char> byteToString (std::byte value);
 
     template<typename K, typename V>
     V* mapFindEntry (std::map<K, V>& map, K key) {
