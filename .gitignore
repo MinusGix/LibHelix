@@ -1,0 +1,5 @@
+build/
+.vscode/
+test/
+compile_commands.json
+todo.txt

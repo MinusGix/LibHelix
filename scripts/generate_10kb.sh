@@ -1,0 +1,1 @@
+head -c 10KB </dev/urandom > build/output.bin
