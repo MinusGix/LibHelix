@@ -93,9 +93,17 @@ namespace Helix {
 		}
 
 		assert(static_cast<Natural>(rounded_position) <= pos);
+		/// The position within the block that we desire
 		size_t block_pos = static_cast<size_t>(pos - static_cast<Natural>(rounded_position));
 
-		return blocks[block_index.value()].data.at(block_pos);
+		Block& block = blocks[block_index.value()];
+
+		// The position was not within a block. Usually(always?) this happens due to reading past the end of the file.
+		if (block_pos >= block.data.size()) {
+			return std::nullopt;
+		}
+
+		return block.data.at(block_pos);
 	}
 
 	void Helix::edit (Natural position, std::byte value, File::EditFlags flags) {
