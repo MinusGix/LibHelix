@@ -394,6 +394,16 @@ namespace Helix {
             return position;
         }
 
+        size_t getSizeDifference (size_t value) {
+            // TODO: possibly make sure this doesn't go under 0 or over max
+            // TODO: also possibly make so the value is passed to it instead of merely adding to it
+            //       that would work better than returning ptrdiff_t, and allow more complicate size differences
+            for (auto& action : actions) {
+			    value += action->getSizeDifference();
+		    }
+            return value;
+        }
+
         void save (FileHelper::File& file) {
             for (std::unique_ptr<Action>& action : actions) {
                 action->save(file);
@@ -595,12 +605,24 @@ namespace Helix {
 
         explicit Helix (std::filesystem::path t_filename, Flags t_hflags);
 
+        std::optional<size_t> cached_file_size;
+        std::optional<size_t> cached_editable_size;
+
+        void clearCaches ();
+
         /// If the file can be written to.
         /// If this is false, then the temp file (in mem) can be written to, but it can't be saved.
         bool isWritable () const;
 
+        /// Gets file size, UNCACHED
         size_t getSize ();
+        /// Gets editable size of the file, UNCACHED
         size_t getEditableSize ();
+
+        /// Gets file size, CACHED
+        size_t getCachedSize ();
+        /// Gets editable size of the file, CACHED
+        size_t getCachedEditableSize ();
 
         std::optional<std::byte> read (Natural position);
         std::vector<std::byte> read (Natural position, size_t amount);

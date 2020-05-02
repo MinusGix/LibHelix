@@ -44,15 +44,33 @@ namespace Helix {
 
 
 	// ==== Helix:Other ====
+	void Helix::clearCaches () {
+		cached_file_size.reset();
+		cached_editable_size.reset();
+	}
+
 	bool Helix::isWritable () const {
 		return file.isWritable();
 	}
 
 	size_t Helix::getSize () {
-		return file.getSize();
+		return actions.getSizeDifference(file.getSize());
 	}
 	size_t Helix::getEditableSize () {
-		return file.getEditableSize();
+		return actions.getSizeDifference(file.getEditableSize());
+	}
+
+    size_t Helix::getCachedSize () {
+		if (!cached_file_size.has_value()) {
+			cached_file_size = getSize();
+		}
+		return cached_file_size.value();
+	}
+    size_t Helix::getCachedEditableSize () {
+		if (!cached_editable_size.has_value()) {
+			cached_editable_size = getSize();
+		}
+		return cached_editable_size.value();
 	}
 
 	std::optional<std::byte> Helix::read (Natural position) {
@@ -106,6 +124,7 @@ namespace Helix {
 		return block.data.at(block_pos);
 	}
 
+	// TODO: should editing clear caches?
 	void Helix::edit (Natural position, std::byte value, File::EditFlags flags) {
 		actions.doAction(std::make_unique<EditAction>(position, std::vector<std::byte>{value}));
 	}
@@ -117,6 +136,8 @@ namespace Helix {
 		if (!mode_info.supportsInsertion()) {
 			throw std::runtime_error("Insertion is unsupported in this mode.");
 		}
+
+		clearCaches();
 
 		// We don't bother filling it with the insertion_value since it essentially already does that
 		if (pattern == InsertionAction::insertion_value) {
@@ -140,6 +161,8 @@ namespace Helix {
 			throw std::runtime_error("Insertion is unsupported in this mode.");
 		}
 
+		clearCaches();
+
 		std::vector<std::byte> data;
 		data.reserve(amount);
 
@@ -158,11 +181,15 @@ namespace Helix {
 		if (!mode_info.supportsDeletion()) {
 			throw std::runtime_error("Deletion is unsupported in this mode.");
 		}
+
+		clearCaches();
+
 		actions.doAction(std::make_unique<DeletionAction>(position, amount));
 	}
 
 	// TODO: investigate if this makes sense
 	SaveStatus Helix::save () {
+		clearCaches();
 		// TODO: check if it's writable
 		SaveAsMode save_as_mode = mode_info.getSaveAsMode();
 		if (save_as_mode == SaveAsMode::Whole) {
@@ -175,6 +202,8 @@ namespace Helix {
 	}
 
 	SaveStatus Helix::saveAs (const std::filesystem::path& destination) {
+		// TODO: check that this sets the active file to the newly saved-as file
+		clearCaches();
 		// TODO: check if it's writable.
 		SaveAsMode save_as_mode = mode_info.getSaveAsMode();
 		if (save_as_mode == SaveAsMode::Whole) {
@@ -263,13 +292,7 @@ namespace Helix {
 		return filename != "" && filename != "." && filename != "..";
 	}
 	size_t Helix::save_calculateResultingFileSize (size_t previous_file_size) {
-		size_t new_file_size = previous_file_size;
-
-		for (size_t i = 0; i < actions.actions.size(); i++) {
-			std::unique_ptr<Action>& action_v = actions.actions.at(i);
-			new_file_size += action_v->getSizeDifference();
-		}
-		return new_file_size;
+		return actions.getSizeDifference(previous_file_size);
 	}
 	/// generates filenames in the form: [filename].[4 byte hex].tmp
 	std::filesystem::path Helix::save_generateTempFilename (std::filesystem::path filename) {
