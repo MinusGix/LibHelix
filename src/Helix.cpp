@@ -95,6 +95,148 @@ namespace Helix {
 		return data;
 	}
 
+	std::optional<uint8_t> Helix::readU8 (Natural position) {
+		std::optional<std::byte> value = read(position);
+		if (value.has_value()) {
+			return static_cast<uint8_t>(value.value());
+		} else {
+			return std::nullopt;
+		}
+	}
+
+
+    std::optional<uint16_t> Helix::readU16BE (Natural position) {
+		std::vector<std::byte> values = read(position, 2);
+		if (values.size() < 2) {
+			// Not enough bytes
+			return std::nullopt;
+		}
+		return (static_cast<uint16_t>(values.at(0)) << 8) |
+			static_cast<uint16_t>(values.at(1));
+	}
+	std::optional<uint16_t> Helix::readU16LE (Natural position) {
+		std::vector<std::byte> values = read(position, 2);
+		if (values.size() < 2) {
+			// Not enough bytes
+			return std::nullopt;
+		}
+		return (static_cast<uint16_t>(values.at(1)) << 8) |
+			static_cast<uint16_t>(values.at(0));
+	}
+
+
+    std::optional<uint32_t> Helix::readU32BE (Natural position) {
+		std::vector<std::byte> values = read(position, 4);
+		if (values.size() < 4) {
+			// Not enough bytes
+			return std::nullopt;
+		}
+		return (static_cast<uint32_t>(values.at(0)) << 24) |
+			(static_cast<uint32_t>(values.at(1)) << 16) |
+			(static_cast<uint32_t>(values.at(2)) << 8) |
+			static_cast<uint32_t>(values.at(3));
+	}
+	std::optional<uint32_t> Helix::readU32LE (Natural position) {
+		std::vector<std::byte> values = read(position, 4);
+		if (values.size() < 4) {
+			// Not enough bytes
+			return std::nullopt;
+		}
+		return (static_cast<uint32_t>(values.at(3)) << 24) |
+			(static_cast<uint32_t>(values.at(2)) << 16) |
+			(static_cast<uint32_t>(values.at(1)) << 8) |
+			static_cast<uint32_t>(values.at(0));
+	}
+
+
+    std::optional<uint64_t> Helix::readU64BE (Natural position) {
+		std::vector<std::byte> values = read(position, 8);
+		if (values.size() < 8) {
+			// Not enough bytes
+			return std::nullopt;
+		}
+		return (static_cast<uint64_t>(values.at(0)) << 56) |
+			(static_cast<uint64_t>(values.at(1)) << 48) |
+			(static_cast<uint64_t>(values.at(2)) << 40) |
+			(static_cast<uint64_t>(values.at(3)) << 32) |
+			(static_cast<uint64_t>(values.at(4)) << 24) |
+			(static_cast<uint64_t>(values.at(5)) << 16) |
+			(static_cast<uint64_t>(values.at(6)) << 8) |
+			static_cast<uint64_t>(values.at(7));
+	}
+	 std::optional<uint64_t> Helix::readU64LE (Natural position) {
+		std::vector<std::byte> values = read(position, 8);
+		if (values.size() < 8) {
+			// Not enough bytes
+			return std::nullopt;
+		}
+		return (static_cast<uint64_t>(values.at(7)) << 56) |
+			(static_cast<uint64_t>(values.at(6)) << 48) |
+			(static_cast<uint64_t>(values.at(5)) << 40) |
+			(static_cast<uint64_t>(values.at(4)) << 32) |
+			(static_cast<uint64_t>(values.at(3)) << 24) |
+			(static_cast<uint64_t>(values.at(2)) << 16) |
+			(static_cast<uint64_t>(values.at(1)) << 8) |
+			static_cast<uint64_t>(values.at(0));
+	}
+
+	// This is certainly undefined behavior
+	union FloatUnion {
+		uint32_t integer;
+		float f32;
+	};
+	union DoubleUnion {
+		uint64_t integer;
+		float f64;
+	};
+
+    std::optional<float> Helix::readF32BE (Natural position) {
+		std::optional<uint32_t> value = readU32BE(position);
+		if (!value.has_value()) {
+			return std::nullopt;
+		}
+
+		FloatUnion un;
+		un.integer = value.value();
+
+		return un.f32;
+	}
+	std::optional<float> Helix::readF32LE (Natural position) {
+		std::optional<uint32_t> value = readU32LE(position);
+		if (!value.has_value()) {
+			return std::nullopt;
+		}
+
+		FloatUnion un;
+		un.integer = value.value();
+
+		return un.f32;
+	}
+
+
+    std::optional<double> Helix::readF64BE (Natural position) {
+		std::optional<uint64_t> value = readU64BE(position);
+		if (!value.has_value()) {
+			return std::nullopt;
+		}
+
+		DoubleUnion un;
+		un.integer = value.value();
+
+		return un.f64;
+	}
+	std::optional<double> Helix::readF64LE (Natural position) {
+		std::optional<uint64_t> value = readU64LE(position);
+		if (!value.has_value()) {
+			return std::nullopt;
+		}
+
+		DoubleUnion un;
+		un.integer = value.value();
+
+		return un.f64;
+	}
+
 	std::optional<std::byte> Helix::readSingleRaw (Natural pos) {
 		const RoundedNatural rounded_position = getRoundedPosition(pos);
 

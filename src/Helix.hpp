@@ -627,6 +627,19 @@ namespace Helix {
         std::optional<std::byte> read (Natural position);
         std::vector<std::byte> read (Natural position, size_t amount);
 
+        std::optional<uint8_t> readU8 (Natural position);
+        std::optional<uint16_t> readU16BE (Natural Position);
+        std::optional<uint16_t> readU16LE (Natural Position);
+        std::optional<uint32_t> readU32BE (Natural Position);
+        std::optional<uint32_t> readU32LE (Natural Position);
+        std::optional<uint64_t> readU64BE (Natural Position);
+        std::optional<uint64_t> readU64LE (Natural Position);
+        // TODO: readU128
+        std::optional<float> readF32BE (Natural Position);
+        std::optional<float> readF32LE (Natural Position);
+        std::optional<double> readF64BE (Natural Position);
+        std::optional<double> readF64LE (Natural Position);
+
         void edit (Natural position, std::byte value, File::EditFlags flags=File::EditFlags());
         void edit (Natural position, std::vector<std::byte>&& values, File::EditFlags flags=File::EditFlags());
 
