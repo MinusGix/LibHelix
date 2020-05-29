@@ -2,13 +2,13 @@
 
 namespace Helix {
 	// ==== Helix:Constructors ====
-	Helix::Helix (std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
-		block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
+	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
+		actions(action_list), block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
 		mode_info(t_hflags.mode_info),
 		file(t_filename, mode_info.getStart(), mode_info.getEnd(), t_flags) {}
 
-	Helix::Helix (std::filesystem::path t_filename, Flags t_hflags) :
-		block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
+	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags) :
+		actions(action_list), block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
 		mode_info(t_hflags.mode_info),
 		file(t_filename, mode_info.getStart(), mode_info.getEnd(), File::OpenFlags()) {}
 
@@ -268,10 +268,10 @@ namespace Helix {
 
 	// TODO: should editing clear caches?
 	void Helix::edit (Natural position, std::byte value, File::EditFlags flags) {
-		actions.doAction(std::make_unique<EditAction>(position, std::vector<std::byte>{value}));
+		actions.addAction(std::make_unique<EditAction>(position, std::vector<std::byte>{value}));
 	}
 	void Helix::edit (Natural position, std::vector<std::byte>&& values, File::EditFlags flags) {
-		actions.doAction(std::make_unique<EditAction>(position, std::forward<std::vector<std::byte>>(values)));
+		actions.addAction(std::make_unique<EditAction>(position, std::forward<std::vector<std::byte>>(values)));
 	}
 
 	void Helix::insert (Natural position, size_t amount, std::byte pattern) {
@@ -284,17 +284,17 @@ namespace Helix {
 		// We don't bother filling it with the insertion_value since it essentially already does that
 		if (pattern == InsertionAction::insertion_value) {
 			// TODO: since we don't bother filling.. the parameter should just be an optional.
-			actions.doAction(std::make_unique<InsertionAction>(position, amount));
+			actions.addAction(std::make_unique<InsertionAction>(position, amount));
 		} else {
 			std::vector<std::byte> data;
 			data.resize(amount);
 			std::fill(data.begin(), data.end(), pattern);
 
-			std::vector<std::unique_ptr<Action>> bundled_list;
-			bundled_list.push_back(std::unique_ptr<Action>(new InsertionAction(position, amount)));
-			bundled_list.push_back(std::unique_ptr<Action>(new EditAction(position, std::move(data))));
+			std::vector<std::unique_ptr<BaseAction>> bundled_list;
+			bundled_list.push_back(std::unique_ptr<BaseAction>(new InsertionAction(position, amount)));
+			bundled_list.push_back(std::unique_ptr<BaseAction>(new EditAction(position, std::move(data))));
 
-			actions.doAction(std::unique_ptr<Action>(new BundledAction(std::move(bundled_list))));
+			actions.addAction(std::unique_ptr<BaseAction>(new BundledAction(std::move(bundled_list))));
 		}
 	}
 
@@ -312,11 +312,11 @@ namespace Helix {
 			data.push_back(pattern.at(i % pattern.size()));
 		}
 
-		std::vector<std::unique_ptr<Action>> bundled_actions;
-		bundled_actions.push_back(std::unique_ptr<Action>(new InsertionAction(position, amount)));
-		bundled_actions.push_back(std::unique_ptr<Action>(new EditAction(position, std::move(data))));
+		std::vector<std::unique_ptr<BaseAction>> bundled_actions;
+		bundled_actions.push_back(std::unique_ptr<BaseAction>(new InsertionAction(position, amount)));
+		bundled_actions.push_back(std::unique_ptr<BaseAction>(new EditAction(position, std::move(data))));
 
-		actions.doAction(std::make_unique<BundledAction>(std::move(bundled_actions)));
+		actions.addAction(std::make_unique<BundledAction>(std::move(bundled_actions)));
 	}
 
 	void Helix::deletion (Natural position, size_t amount) {
@@ -326,7 +326,7 @@ namespace Helix {
 
 		clearCaches();
 
-		actions.doAction(std::make_unique<DeletionAction>(position, amount));
+		actions.addAction(std::make_unique<DeletionAction>(position, amount));
 	}
 
 	// TODO: investigate if this makes sense
@@ -550,12 +550,12 @@ namespace Helix {
 	}
 
 	// ==== PluginHelix:Constructors ====
-	PluginHelix::PluginHelix (std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
-        Helix(t_filename, t_flags, t_hflags), current_file(*this) {
+	PluginHelix::PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
+        Helix(action_list, t_filename, t_flags, t_hflags), current_file(*this) {
         initLua();
     }
-    PluginHelix::PluginHelix (std::filesystem::path t_filename, Flags t_hflags) :
-        Helix(t_filename, t_hflags), current_file(*this) {
+    PluginHelix::PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags) :
+        Helix(action_list, t_filename, t_hflags), current_file(*this) {
         initLua();
     }
 
@@ -655,12 +655,12 @@ namespace Helix {
 #ifdef HELIX_USE_LUA_GUI
 
 	// ==== PluginGUIHelix:Constructors ====
-	PluginGUIHelix::PluginGUIHelix (std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
-        PluginHelix(t_filename, t_flags, t_hflags) {
+	PluginGUIHelix::PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
+        PluginHelix(action_list, t_filename, t_flags, t_hflags) {
         initGUILua();
     }
-    PluginGUIHelix::PluginGUIHelix (std::filesystem::path t_filename, Flags t_hflags) :
-        PluginHelix(t_filename, t_hflags) {
+    PluginGUIHelix::PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags) :
+        PluginHelix(action_list, t_filename, t_hflags) {
         initGUILua();
     }
 	void PluginGUIHelix::initGUILua () {

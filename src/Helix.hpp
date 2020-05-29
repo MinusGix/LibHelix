@@ -14,6 +14,7 @@
 #include "File.hpp"
 #include "types.hpp"
 #include <type_safe/strong_typedef.hpp>
+#include "../subprojects/libmlactions/src/MlActions.hpp"
 #define HELIX_USE_LUA
 #define HELIX_USE_LUA_GUI
 #ifdef HELIX_USE_LUA
@@ -59,22 +60,9 @@ namespace Helix {
 
     using ActionStatus = RedoStatus;
 
-    struct Action {
-        virtual ~Action () {}
-
-        virtual bool canUndo () const {
-            return true;
-        }
-        virtual bool canRedo () const {
-            return true;
-        }
-
-        virtual UndoStatus undo () {
-            return UndoStatus::Success;
-        }
-        virtual RedoStatus redo () {
-            return RedoStatus::Success;
-        }
+    struct BaseAction {
+        explicit BaseAction () {}
+        virtual ~BaseAction () {}
 
         /// Returns the byte value (if somehow stored in the action)
         /// or the position before any modifications to it
@@ -93,7 +81,7 @@ namespace Helix {
 
     // It is somewhat notable that the three basic Actions (Edit, Insertion, Deletion) don't have any custom code for undo/redo as they simply exist for storing data
     // Though they'll of course need custom code for actually saving to the file.
-    struct EditAction : public Action {
+    struct EditAction : public BaseAction {
         Natural position;
         std::vector<std::byte> data;
 
@@ -122,7 +110,7 @@ namespace Helix {
             );
         }
     };
-    struct InsertionAction : public Action {
+    struct InsertionAction : public BaseAction {
         static constexpr std::byte insertion_value = std::byte(0x00);
         Natural position;
         size_t amount;
@@ -158,7 +146,7 @@ namespace Helix {
             );
         }
     };
-    struct DeletionAction : public Action {
+    struct DeletionAction : public BaseAction {
         Natural position;
         size_t amount;
 
@@ -186,92 +174,15 @@ namespace Helix {
             );
         }
     };
-    struct BundledAction : public Action {
-        std::vector<std::unique_ptr<Action>> actions;
+    struct BundledAction : public BaseAction {
+        std::vector<std::unique_ptr<BaseAction>> actions;
 
-        explicit BundledAction (std::vector<std::unique_ptr<Action>>&& t_actions) : actions(std::move(t_actions)) {}
-
-        bool canUndo () const override {
-            for (const std::unique_ptr<Action>& v : actions) {
-                bool result = v->canUndo();
-                if (!result) {
-                    // One of the items can't be undone, so none of them can be
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        bool canRedo () const override {
-            for (const std::unique_ptr<Action>& v : actions) {
-                bool result = v->canRedo();
-                if (!result) {
-                    // One of the items can't be redone, so none of them can be
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        UndoStatus undo () override {
-            if (!canUndo()) {
-                return UndoStatus::Unnable;
-            }
-
-            if (actions.size() == 0) {
-                return UndoStatus::Success;
-            }
-
-            for (size_t i = actions.size(); i--;) {
-                actions.at(i)->undo();
-            }
-
-            // For simplicities sake we don't use this.
-    /*
-            for (size_t i = actions.size(); i--;) {
-                VariantType& action = actions.at(i);
-
-                UndoStatus result = std::visit([] (auto&& x) { return x.undo(); }, action);
-
-                // One of the actions failed in undoing,
-                if (result != UndoStatus::Success) {
-                    // Forward iterate, re-doing the actions.
-                    for (size_t j = i + 1; j < actions.size(); j++) {
-                        VariantType& r_action = actions.at(j);
-                        RedoStatus r_result = std::visit([] (auto&& x) { return x.redo(); }, action);
-
-                        // it failed.. thus we're in a state where we can't return from
-                        if (r_result != RedoStatus::Success) {
-                            return UndoStatus::InvalidState;
-                        }
-                    }
-                    return result;
-                }f
-            }*/
-
-            return UndoStatus::Success;
-        }
-
-        RedoStatus redo () override {
-            if (!canRedo()) {
-                return RedoStatus::Unnable;
-            }
-
-            if (actions.size() == 0) {
-                return RedoStatus::Success;
-            }
-
-            for (size_t i = actions.size(); i--;) {
-                actions.at(i)->redo();
-            }
-
-            return RedoStatus::Success;
-        }
+        explicit BundledAction (std::vector<std::unique_ptr<BaseAction>>&& t_actions) : actions(std::move(t_actions)) {}
 
         // TODo: this is slightly annoying, as it's the exact same as the ActionLists readFromStorage function
         std::variant<std::byte, Natural> reversePosition (Natural position) override {
             for (auto iterator = actions.rbegin(); iterator != actions.rend(); ++iterator) {
-                std::unique_ptr<Action>& action_variant = *iterator;
+                std::unique_ptr<BaseAction>& action_variant = *iterator;
 
                 std::variant<std::byte, Natural> result = action_variant->reversePosition(position);
 
@@ -285,131 +196,51 @@ namespace Helix {
         }
 
         void save (FileHelper::File& file) override {
-            for (std::unique_ptr<Action>& action_v : actions) {
+            for (std::unique_ptr<BaseAction>& action_v : actions) {
                 action_v->save(file);
             }
         }
     };
 
-    class ActionList {
+    class ActionListLink : public MlActions::ActionListLink<BaseAction> {
         public:
-        // Should be mainly edited through helper functions
-        std::vector<std::unique_ptr<Action>> actions;
-        /// This is where we currently are in the edit history.
-        /// Everything before it is currently 'applied', everything after is unapplied
-        /// Ex: {Alpha, Beta}
-        /// with an index of 0, both Alpha and Beta would be unapplied.
-        /// With an index of 1, Alpha is applied and Beta is unapplied.
-        /// With an index of 2, both are applied.
-        size_t index = 0;
 
-        bool hasAppliedEntries () const {
-            // We don't bother verifying that index is valid, as it should always be.
-            return index > 0;
-        }
-
-        bool hasUnappliedEntries () const {
-            return index < actions.size();
-        }
-
-        bool canUndo () const {
-            if (hasAppliedEntries()) {
-                return actions.at(index - 1)->canUndo();
-            }
-            return false;
-        }
-
-        bool canRedo () const {
-            if (hasUnappliedEntries()) {
-                return actions.at(index)->canRedo();
-            }
-            return false;
-        }
-
-        UndoStatus undo () {
-            if (!hasAppliedEntries()) {
-                return UndoStatus::Nothing;
-            }
-
-            if (!canUndo()) {
-                return UndoStatus::Unnable;
-            }
-
-            // We subtract first for simplicities sake. Since the previous undo is 1 behind index.
-            index--;
-            return actions.at(index)->undo();
-        }
-
-        RedoStatus redo () {
-            if (!hasUnappliedEntries()) {
-                return RedoStatus::Nothing;
-            }
-
-            if (!canRedo()) {
-                return RedoStatus::Unnable;
-            }
-
-            index++;
-            return actions.at(index - 1)->redo();
-        }
-
-        void clearUnappliedActions () {
-            if (!hasUnappliedEntries()) {
-                return;
-            }
-
-            size_t size = actions.size();
-            for (size_t i = index; i < size; i++) {
-                actions.pop_back();
-            }
-        }
-
-        ActionStatus doAction (std::unique_ptr<Action>&& action) {
-            clearUnappliedActions();
-
-            actions.push_back(std::move(action));
-
-            index++;
-
-            // We just tell it to 'redo', even though we haven't done it already.
-            // If you need to know if it's the first run then simply have a bool on the Action instance for if it's been ran.
-            return actions.at(index - 1)->redo();
-        }
+        explicit ActionListLink (MlActions::ActionList& action_list) : MlActions::ActionListLink<BaseAction>(action_list) {}
 
         /// What this function does is applies the Actions in *reverse* until it finds an action which modified the position we're looking for.
         /// Due to the way this works, if we don't find an Action that edited the position, then the new-position is the right place in the file to read!
-        std::variant<std::byte, Natural> readFromStorage (Natural position) {
-            // iterate in reverse
-            for (auto iterator = actions.rbegin(); iterator != actions.rend(); ++iterator) {
-                std::unique_ptr<Action>& action_variant = *iterator;
+        std::variant<std::byte, Natural> readFromStorage (Natural natural_position) {
+            // TODO: have mlaction provide a useful function for this
+            for (auto iterator = this->data.rbegin(); iterator != this->data.rend(); ++iterator) {
+                std::unique_ptr<BaseAction>& action = *iterator;
 
-                std::variant<std::byte, Natural> result = action_variant->reversePosition(position);
+                std::variant<std::byte, Natural> result = action->reversePosition(natural_position);
 
                 if (std::holds_alternative<std::byte>(result)) {
                     return std::get<std::byte>(result);
                 } else {
-                    position = std::get<Natural>(result);
+                    natural_position = std::get<Natural>(result);
                 }
             }
-            return position;
+            return natural_position;
         }
 
         size_t getSizeDifference (size_t value) {
             // TODO: possibly make sure this doesn't go under 0 or over max
             // TODO: also possibly make so the value is passed to it instead of merely adding to it
             //       that would work better than returning ptrdiff_t, and allow more complicate size differences
-            for (auto& action : actions) {
-			    value += action->getSizeDifference();
-		    }
+            for (auto& action : this->data) {
+                value += action->getSizeDifference();
+            }
             return value;
         }
 
         void save (FileHelper::File& file) {
-            for (std::unique_ptr<Action>& action : actions) {
+            for (auto& action : data) {
                 action->save(file);
             }
             // TODO: undoing past a save would be really nice to have
-            actions.clear();
+            list.clear();
         }
     };
 
@@ -593,7 +424,7 @@ namespace Helix {
 
         public:
 
-        ActionList actions;
+        ActionListLink actions;
 
         protected:
 
@@ -601,9 +432,9 @@ namespace Helix {
 
         public:
 
-        explicit Helix (std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
+        explicit Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
 
-        explicit Helix (std::filesystem::path t_filename, Flags t_hflags);
+        explicit Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags);
 
         std::optional<size_t> cached_file_size;
         std::optional<size_t> cached_editable_size;
@@ -759,8 +590,8 @@ namespace Helix {
         CurrentFile current_file;
         public:
 
-        explicit PluginHelix (std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
-        explicit PluginHelix (std::filesystem::path t_filename, Flags t_hflags);
+        explicit PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
+        explicit PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags);
 
         sol::state& getLua ();
 
@@ -792,8 +623,8 @@ namespace Helix {
 
     class PluginGUIHelix : public PluginHelix {
         public:
-        explicit PluginGUIHelix (std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
-        explicit PluginGUIHelix (std::filesystem::path t_filename, Flags t_hflags);
+        explicit PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
+        explicit PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags);
 
         protected:
         void initGUILua ();
