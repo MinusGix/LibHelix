@@ -17,7 +17,8 @@ incdir = include_directories('include')
 lua_dep = dependency('lua')
 
 libmlactions_proj = subproject('libmlactions')
-deps = [lua_dep]
+libmlactions_dep = libmlactions_proj.get_variable('mlactions_dep')
+deps = [lua_dep, libmlactions_dep]
 
 libhelix = shared_library('helix',
     srcs,

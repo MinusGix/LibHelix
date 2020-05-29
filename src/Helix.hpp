@@ -14,7 +14,7 @@
 #include "File.hpp"
 #include "types.hpp"
 #include <type_safe/strong_typedef.hpp>
-#include "../subprojects/libmlactions/src/MlActions.hpp"
+#include <MlActions.hpp>
 #define HELIX_USE_LUA
 #define HELIX_USE_LUA_GUI
 #ifdef HELIX_USE_LUA
