@@ -15,6 +15,8 @@ srcs = [
 incdir = include_directories('include')
 
 lua_dep = dependency('lua')
+
+libmlactions_proj = subproject('libmlactions')
 deps = [lua_dep]
 
 libhelix = shared_library('helix',
