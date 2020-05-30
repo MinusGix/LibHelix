@@ -8,7 +8,6 @@ project(
 
 srcs = [
     'src/Helix.cpp',
-    'src/File.cpp',
     'src/util.cpp'
 ]
 
@@ -18,7 +17,10 @@ lua_dep = dependency('lua')
 
 libmlactions_proj = subproject('libmlactions')
 libmlactions_dep = libmlactions_proj.get_variable('mlactions_dep')
-deps = [lua_dep, libmlactions_dep]
+
+libalphafile_proj = subproject('libalphafile')
+libalphafile_dep = libalphafile_proj.get_variable('libalphafile_dep')
+deps = [lua_dep, libmlactions_dep, libalphafile_dep]
 
 libhelix = shared_library('helix',
     srcs,

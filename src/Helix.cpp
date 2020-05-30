@@ -2,20 +2,26 @@
 
 namespace Helix {
 	// ==== Helix:Constructors ====
-	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
+	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags, Flags t_hflags) :
 		actions(action_list), block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
-		mode_info(t_hflags.mode_info),
-		file(t_filename, mode_info.getStart(), mode_info.getEnd(), t_flags) {}
+		mode_info(t_hflags.mode_info) {
+		file.setStart(mode_info.getStart());
+		file.setEnd(mode_info.getEnd());
+		file.open(t_flags, t_filename);
+	}
 
 	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags) :
 		actions(action_list), block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
-		mode_info(t_hflags.mode_info),
-		file(t_filename, mode_info.getStart(), mode_info.getEnd(), File::OpenFlags()) {}
+		mode_info(t_hflags.mode_info) {
+		file.setStart(mode_info.getStart());
+		file.setEnd(mode_info.getEnd());
+		file.open(AlphaFile::OpenFlags(), t_filename);
+	}
 
 
 	// ==== Helix:Blocks ====
-	Helix::RoundedNatural Helix::getRoundedPosition (Natural position) const {
-		return Helix::RoundedNatural(util::getRoundedPosition(position, Natural(block_size)));
+	Helix::RoundedNatural Helix::getRoundedPosition (AlphaFile::Natural position) const {
+		return Helix::RoundedNatural(util::getRoundedPosition(position, block_size));
 	}
 
 	std::optional<size_t> Helix::findBlock (RoundedNatural rounded_position) const {
@@ -29,7 +35,7 @@ namespace Helix {
 	}
 
 	std::optional<size_t> Helix::createBlock (RoundedNatural position) {
-		std::vector<std::byte> bytes = file.read(static_cast<Natural>(position), block_size);
+		std::vector<std::byte> bytes = file.read(position, block_size);
 
 		if (bytes.size() == 0) {
 			return std::nullopt;
@@ -73,20 +79,20 @@ namespace Helix {
 		return cached_editable_size.value();
 	}
 
-	std::optional<std::byte> Helix::read (Natural position) {
-		std::variant<std::byte, Natural> data = actions.readFromStorage(position);
+	std::optional<std::byte> Helix::read (AlphaFile::Natural position) {
+		std::variant<std::byte, AlphaFile::Natural> data = actions.readFromStorage(position);
 		if (std::holds_alternative<std::byte>(data)) {
 			return std::get<std::byte>(data);
 		} else {
-			return readSingleRaw(std::get<Natural>(data));
+			return readSingleRaw(std::get<AlphaFile::Natural>(data));
 		}
 	}
-	std::vector<std::byte> Helix::read (Natural position, size_t amount) {
+	std::vector<std::byte> Helix::read (AlphaFile::Natural position, size_t amount) {
 		// This is bleh, it'd be nice to have an optimized method for this that doesn't call the function a ton of times
 		std::vector<std::byte> data;
 		data.reserve(amount);
 		for (size_t i = 0; i < amount; i++) {
-			std::optional<std::byte> byte_opt = read(position + Relative(i));
+			std::optional<std::byte> byte_opt = read(position + i);
 			if (!byte_opt.has_value()) {
 				break;
 			}
@@ -95,7 +101,7 @@ namespace Helix {
 		return data;
 	}
 
-	std::optional<uint8_t> Helix::readU8 (Natural position) {
+	std::optional<uint8_t> Helix::readU8 (AlphaFile::Natural position) {
 		std::optional<std::byte> value = read(position);
 		if (value.has_value()) {
 			return static_cast<uint8_t>(value.value());
@@ -105,7 +111,7 @@ namespace Helix {
 	}
 
 
-    std::optional<uint16_t> Helix::readU16BE (Natural position) {
+    std::optional<uint16_t> Helix::readU16BE (AlphaFile::Natural position) {
 		std::vector<std::byte> values = read(position, 2);
 		if (values.size() < 2) {
 			// Not enough bytes
@@ -114,7 +120,7 @@ namespace Helix {
 		return (static_cast<uint16_t>(values.at(0)) << 8) |
 			static_cast<uint16_t>(values.at(1));
 	}
-	std::optional<uint16_t> Helix::readU16LE (Natural position) {
+	std::optional<uint16_t> Helix::readU16LE (AlphaFile::Natural position) {
 		std::vector<std::byte> values = read(position, 2);
 		if (values.size() < 2) {
 			// Not enough bytes
@@ -125,7 +131,7 @@ namespace Helix {
 	}
 
 
-    std::optional<uint32_t> Helix::readU32BE (Natural position) {
+    std::optional<uint32_t> Helix::readU32BE (AlphaFile::Natural position) {
 		std::vector<std::byte> values = read(position, 4);
 		if (values.size() < 4) {
 			// Not enough bytes
@@ -136,7 +142,7 @@ namespace Helix {
 			(static_cast<uint32_t>(values.at(2)) << 8) |
 			static_cast<uint32_t>(values.at(3));
 	}
-	std::optional<uint32_t> Helix::readU32LE (Natural position) {
+	std::optional<uint32_t> Helix::readU32LE (AlphaFile::Natural position) {
 		std::vector<std::byte> values = read(position, 4);
 		if (values.size() < 4) {
 			// Not enough bytes
@@ -149,7 +155,7 @@ namespace Helix {
 	}
 
 
-    std::optional<uint64_t> Helix::readU64BE (Natural position) {
+    std::optional<uint64_t> Helix::readU64BE (AlphaFile::Natural position) {
 		std::vector<std::byte> values = read(position, 8);
 		if (values.size() < 8) {
 			// Not enough bytes
@@ -164,7 +170,7 @@ namespace Helix {
 			(static_cast<uint64_t>(values.at(6)) << 8) |
 			static_cast<uint64_t>(values.at(7));
 	}
-	 std::optional<uint64_t> Helix::readU64LE (Natural position) {
+	 std::optional<uint64_t> Helix::readU64LE (AlphaFile::Natural position) {
 		std::vector<std::byte> values = read(position, 8);
 		if (values.size() < 8) {
 			// Not enough bytes
@@ -180,6 +186,7 @@ namespace Helix {
 			static_cast<uint64_t>(values.at(0));
 	}
 
+	// TODO:
 	// This is certainly undefined behavior
 	union FloatUnion {
 		uint32_t integer;
@@ -190,7 +197,7 @@ namespace Helix {
 		float f64;
 	};
 
-    std::optional<float> Helix::readF32BE (Natural position) {
+    std::optional<float> Helix::readF32BE (AlphaFile::Natural position) {
 		std::optional<uint32_t> value = readU32BE(position);
 		if (!value.has_value()) {
 			return std::nullopt;
@@ -201,7 +208,7 @@ namespace Helix {
 
 		return un.f32;
 	}
-	std::optional<float> Helix::readF32LE (Natural position) {
+	std::optional<float> Helix::readF32LE (AlphaFile::Natural position) {
 		std::optional<uint32_t> value = readU32LE(position);
 		if (!value.has_value()) {
 			return std::nullopt;
@@ -214,7 +221,7 @@ namespace Helix {
 	}
 
 
-    std::optional<double> Helix::readF64BE (Natural position) {
+    std::optional<double> Helix::readF64BE (AlphaFile::Natural position) {
 		std::optional<uint64_t> value = readU64BE(position);
 		if (!value.has_value()) {
 			return std::nullopt;
@@ -225,7 +232,7 @@ namespace Helix {
 
 		return un.f64;
 	}
-	std::optional<double> Helix::readF64LE (Natural position) {
+	std::optional<double> Helix::readF64LE (AlphaFile::Natural position) {
 		std::optional<uint64_t> value = readU64LE(position);
 		if (!value.has_value()) {
 			return std::nullopt;
@@ -237,7 +244,7 @@ namespace Helix {
 		return un.f64;
 	}
 
-	std::optional<std::byte> Helix::readSingleRaw (Natural pos) {
+	std::optional<std::byte> Helix::readSingleRaw (AlphaFile::Natural pos) {
 		const RoundedNatural rounded_position = getRoundedPosition(pos);
 
 		std::optional<size_t> block_index = findBlock(rounded_position);
@@ -252,9 +259,9 @@ namespace Helix {
 			}
 		}
 
-		assert(static_cast<Natural>(rounded_position) <= pos);
+		assert(rounded_position <= pos);
 		/// The position within the block that we desire
-		size_t block_pos = static_cast<size_t>(pos - static_cast<Natural>(rounded_position));
+		size_t block_pos = static_cast<size_t>(pos - rounded_position);
 
 		Block& block = blocks[block_index.value()];
 
@@ -267,14 +274,14 @@ namespace Helix {
 	}
 
 	// TODO: should editing clear caches?
-	void Helix::edit (Natural position, std::byte value, File::EditFlags flags) {
+	void Helix::edit (AlphaFile::Natural position, std::byte value) {
 		actions.addAction(std::make_unique<EditAction>(position, std::vector<std::byte>{value}));
 	}
-	void Helix::edit (Natural position, std::vector<std::byte>&& values, File::EditFlags flags) {
+	void Helix::edit (AlphaFile::Natural position, std::vector<std::byte>&& values) {
 		actions.addAction(std::make_unique<EditAction>(position, std::forward<std::vector<std::byte>>(values)));
 	}
 
-	void Helix::insert (Natural position, size_t amount, std::byte pattern) {
+	void Helix::insert (AlphaFile::Natural position, size_t amount, std::byte pattern) {
 		if (!mode_info.supportsInsertion()) {
 			throw std::runtime_error("Insertion is unsupported in this mode.");
 		}
@@ -298,7 +305,7 @@ namespace Helix {
 		}
 	}
 
-	void Helix::insert (Natural position, size_t amount, const std::vector<std::byte>& pattern) {
+	void Helix::insert (AlphaFile::Natural position, size_t amount, const std::vector<std::byte>& pattern) {
 		if (!mode_info.supportsInsertion()) {
 			throw std::runtime_error("Insertion is unsupported in this mode.");
 		}
@@ -319,7 +326,7 @@ namespace Helix {
 		actions.addAction(std::make_unique<BundledAction>(std::move(bundled_actions)));
 	}
 
-	void Helix::deletion (Natural position, size_t amount) {
+	void Helix::deletion (AlphaFile::Natural position, size_t amount) {
 		if (!mode_info.supportsDeletion()) {
 			throw std::runtime_error("Deletion is unsupported in this mode.");
 		}
@@ -335,7 +342,7 @@ namespace Helix {
 		// TODO: check if it's writable
 		SaveAsMode save_as_mode = mode_info.getSaveAsMode();
 		if (save_as_mode == SaveAsMode::Whole) {
-			return saveAsFile(file.filename);
+			return saveAsFile(file.getFilename());
 		} else if (save_as_mode == SaveAsMode::Partial) {
 			return save_file_simple();
 		} else {
@@ -359,7 +366,7 @@ namespace Helix {
 
 	// ==== Helix:Save-Internal ====
 	SaveStatus Helix::save_file_simple () {
-		actions.save(file.file);
+		actions.save(file.getBasicFile());
 		return SaveStatus::Success;
 	}
 
@@ -383,7 +390,7 @@ namespace Helix {
 		// Make sure there is a parent folder
 		// Not sure if we can actually get a blank parent_path
 		if (destination.parent_path() == "") {
-			destination = file.filename.parent_path() / destination;
+			destination = file.getFilename().parent_path() / destination;
 		}
 
 		// Make sure that the folder it's in exists.
@@ -405,14 +412,16 @@ namespace Helix {
 		const auto& [temp_filename, temp_file_path] = paths.value();
 
 		// We simply copy the file as the temp file that we're modifying.
-		std::filesystem::copy_file(file.filename, temp_file_path);
+		std::filesystem::copy_file(file.getFilename(), temp_file_path);
 
 		// TODO: this may not be needed?
 		// Resize to the size of the largest file (src, src-after-modifications)
 		// we'll cut off any remaining bytes.
 		std::filesystem::resize_file(temp_file_path, file_size.largest());
 
-		FileHelper::File temp_file(temp_file_path, std::ios::out | std::ios::binary | std::ios::in);
+		AlphaFile::BasicFile temp_file;
+		// TODO: handle errors
+		temp_file.open(AlphaFile::OpenFlags(true), temp_file_path);
 
 		// Write all the actions to the newly created temporary file
 		actions.save(temp_file);
@@ -526,19 +535,19 @@ namespace Helix {
 	}
 
 	void PluginHelix::CurrentFile::edit (size_t natural_position, sol::table table) {
-		helix.edit(Natural(natural_position), LuaUtil::convertTableToBytes(table));
+		helix.edit(natural_position, LuaUtil::convertTableToBytes(table));
 	}
 
 	std::vector<std::byte> PluginHelix::CurrentFile::read (size_t natural_position, size_t amount) {
-		return helix.read(Natural(natural_position), amount);
+		return helix.read(natural_position, amount);
 	}
 
 	void PluginHelix::CurrentFile::insertion (size_t natural_position, size_t amount) {
-		helix.insert(Natural(natural_position), amount);
+		helix.insert(natural_position, amount);
 	}
 
 	void PluginHelix::CurrentFile::deletion (size_t natural_position, size_t amount) {
-		helix.deletion(Natural(natural_position), amount);
+		helix.deletion(natural_position, amount);
 	}
 
 	SaveStatus PluginHelix::CurrentFile::save () {
@@ -550,7 +559,7 @@ namespace Helix {
 	}
 
 	// ==== PluginHelix:Constructors ====
-	PluginHelix::PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
+	PluginHelix::PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags, Flags t_hflags) :
         Helix(action_list, t_filename, t_flags, t_hflags), current_file(*this) {
         initLua();
     }
@@ -634,7 +643,7 @@ namespace Helix {
 
 	// ==== PluginHelix:Other ====
 
-	void PluginHelix::edit (Natural position, std::byte value, File::EditFlags flags) {
+	void PluginHelix::edit (AlphaFile::Natural position, std::byte value) {
 		// TODO: would it be possible to just make it a reference_wrapper (std::ref)?
 		// Slightly ugly, but it creates a temporary table to use to store the value.
 
@@ -642,12 +651,12 @@ namespace Helix {
 		table[1] = value;
 		current_file.events.triggerTemplate(current_file.events.keys.template get<int32_t>("Edit"), static_cast<size_t>(position), table);
 		value = table.get<std::byte>(1);
-		Helix::edit(position, value, flags);
+		Helix::edit(position, value);
     }
 
-    void PluginHelix::edit (Natural position, std::vector<std::byte>&& values, File::EditFlags flags) {
+    void PluginHelix::edit (AlphaFile::Natural position, std::vector<std::byte>&& values) {
         current_file.events.triggerTemplate(current_file.events.keys.template get<int32_t>("Edit"), static_cast<size_t>(position), std::ref(values));
-        Helix::edit(position, std::move(values), flags);
+        Helix::edit(position, std::move(values));
     }
 
 
@@ -655,7 +664,7 @@ namespace Helix {
 #ifdef HELIX_USE_LUA_GUI
 
 	// ==== PluginGUIHelix:Constructors ====
-	PluginGUIHelix::PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags, Flags t_hflags) :
+	PluginGUIHelix::PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags, Flags t_hflags) :
         PluginHelix(action_list, t_filename, t_flags, t_hflags) {
         initGUILua();
     }

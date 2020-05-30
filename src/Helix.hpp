@@ -10,16 +10,13 @@
 #include <random>
 #include <array>
 #include <variant>
+#include <map>
 
-#include "File.hpp"
-#include "types.hpp"
-#include <type_safe/strong_typedef.hpp>
 #include <MlActions.hpp>
+#include <AlphaFile.hpp>
 #define HELIX_USE_LUA
 #define HELIX_USE_LUA_GUI
 #ifdef HELIX_USE_LUA
-
-#include <map>
 
 // Ignore warnings from this header
 
@@ -33,6 +30,8 @@
 #pragma GCC diagnostic pop
 
 #endif
+
+#include "util.hpp"
 
 namespace Helix {
 
@@ -66,7 +65,7 @@ namespace Helix {
 
         /// Returns the byte value (if somehow stored in the action)
         /// or the position before any modifications to it
-        virtual std::variant<std::byte, Natural> reversePosition (Natural position) {
+        virtual std::variant<std::byte, AlphaFile::Natural> reversePosition (AlphaFile::Natural position) {
             // No modifications
             return position;
         }
@@ -76,18 +75,18 @@ namespace Helix {
             return 0;
         }
 
-        virtual void save (FileHelper::File& file) = 0;
+        virtual void save (AlphaFile::BasicFile& file) = 0;
     };
 
     // It is somewhat notable that the three basic Actions (Edit, Insertion, Deletion) don't have any custom code for undo/redo as they simply exist for storing data
     // Though they'll of course need custom code for actually saving to the file.
     struct EditAction : public BaseAction {
-        Natural position;
+        AlphaFile::Natural position;
         std::vector<std::byte> data;
 
-        explicit EditAction (Natural t_position, std::vector<std::byte>&& t_data) : position(t_position), data(t_data) {}
+        explicit EditAction (AlphaFile::Natural t_position, std::vector<std::byte>&& t_data) : position(t_position), data(t_data) {}
 
-        std::variant<std::byte, Natural> reversePosition (Natural read_position) override {
+        std::variant<std::byte, AlphaFile::Natural> reversePosition (AlphaFile::Natural read_position) override {
             if (data.size() == 0) {
                 return read_position; // just continue
             }
@@ -95,7 +94,7 @@ namespace Helix {
             // is-in-range of [position, position + data.size)
             if (
                 read_position >= position &&
-                read_position < (position + Relative(data.size()))
+                read_position < (position + data.size())
             ) {
                 return data.at(static_cast<size_t>(read_position - position));
             }
@@ -103,30 +102,27 @@ namespace Helix {
             return read_position;
         }
 
-        void save (FileHelper::File& file) override {
-            file.write(
-                static_cast<std::streampos>(static_cast<size_t>(position)),
-                data
-            );
+        void save (AlphaFile::BasicFile& file) override {
+            file.edit(position, data);
         }
     };
     struct InsertionAction : public BaseAction {
         static constexpr std::byte insertion_value = std::byte(0x00);
-        Natural position;
+        AlphaFile::Natural position;
         size_t amount;
 
-        explicit InsertionAction (Natural t_position, size_t t_amount) : position(t_position), amount(t_amount) {}
+        explicit InsertionAction (AlphaFile::Natural t_position, size_t t_amount) : position(t_position), amount(t_amount) {}
 
-        std::variant<std::byte, Natural> reversePosition (Natural read_position) override {
+        std::variant<std::byte, AlphaFile::Natural> reversePosition (AlphaFile::Natural read_position) override {
             if (
                 read_position >= position &&
-                read_position < (position + Relative(amount))
+                read_position < (position + amount)
             ) {
                 return std::byte(insertion_value);
             }
 
             if (read_position >= position) {
-                return read_position - Relative(amount);
+                return read_position - amount;
             }
             // Do nothing
             return read_position;
@@ -137,24 +133,20 @@ namespace Helix {
             return static_cast<ptrdiff_t>(amount);
         }
 
-        void save (FileHelper::File& file) override {
-            file.insertion(
-                static_cast<size_t>(5),
-                amount,
-                // TODO: pass in chunk_size somehow
-                120
-            );
+        void save (AlphaFile::BasicFile& file) override {
+            // TODO: pass in chunk_size somehow
+            file.insertion(position, amount, 120);
         }
     };
     struct DeletionAction : public BaseAction {
-        Natural position;
+        AlphaFile::Natural position;
         size_t amount;
 
-        explicit DeletionAction (Natural t_position, size_t t_amount) : position(t_position), amount(t_amount) {}
+        explicit DeletionAction (AlphaFile::Natural t_position, size_t t_amount) : position(t_position), amount(t_amount) {}
 
-        std::variant<std::byte, Natural> reversePosition (Natural read_position) override {
+        std::variant<std::byte, AlphaFile::Natural> reversePosition (AlphaFile::Natural read_position) override {
             if (read_position >= position) {
-                return read_position + Relative(amount);
+                return read_position + amount;
             }
             // Do nothing
             return read_position;
@@ -165,13 +157,9 @@ namespace Helix {
             return static_cast<ptrdiff_t>(amount);
         }
 
-        void save (FileHelper::File& file) override {
-            file.deletion(
-                static_cast<size_t>(5),
-                amount,
-                // TODO: pass in chunk_size somhow
-                120
-            );
+        void save (AlphaFile::BasicFile& file) override {
+            // TODO: pass in chunk_size somehow
+            file.deletion(position, amount, 120);
         }
     };
     struct BundledAction : public BaseAction {
@@ -180,22 +168,22 @@ namespace Helix {
         explicit BundledAction (std::vector<std::unique_ptr<BaseAction>>&& t_actions) : actions(std::move(t_actions)) {}
 
         // TODo: this is slightly annoying, as it's the exact same as the ActionLists readFromStorage function
-        std::variant<std::byte, Natural> reversePosition (Natural position) override {
+        std::variant<std::byte, AlphaFile::Natural> reversePosition (AlphaFile::Natural position) override {
             for (auto iterator = actions.rbegin(); iterator != actions.rend(); ++iterator) {
                 std::unique_ptr<BaseAction>& action_variant = *iterator;
 
-                std::variant<std::byte, Natural> result = action_variant->reversePosition(position);
+                std::variant<std::byte, AlphaFile::Natural> result = action_variant->reversePosition(position);
 
                 if (std::holds_alternative<std::byte>(result)) {
                     return std::get<std::byte>(result);
                 } else {
-                    position = std::get<Natural>(result);
+                    position = std::get<AlphaFile::Natural>(result);
                 }
             }
             return position;
         }
 
-        void save (FileHelper::File& file) override {
+        void save (AlphaFile::BasicFile& file) override {
             for (std::unique_ptr<BaseAction>& action_v : actions) {
                 action_v->save(file);
             }
@@ -209,17 +197,17 @@ namespace Helix {
 
         /// What this function does is applies the Actions in *reverse* until it finds an action which modified the position we're looking for.
         /// Due to the way this works, if we don't find an Action that edited the position, then the new-position is the right place in the file to read!
-        std::variant<std::byte, Natural> readFromStorage (Natural natural_position) {
+        std::variant<std::byte, AlphaFile::Natural> readFromStorage (AlphaFile::Natural natural_position) {
             // TODO: have mlaction provide a useful function for this
             for (auto iterator = this->data.rbegin(); iterator != this->data.rend(); ++iterator) {
                 std::unique_ptr<BaseAction>& action = *iterator;
 
-                std::variant<std::byte, Natural> result = action->reversePosition(natural_position);
+                std::variant<std::byte, AlphaFile::Natural> result = action->reversePosition(natural_position);
 
                 if (std::holds_alternative<std::byte>(result)) {
                     return std::get<std::byte>(result);
                 } else {
-                    natural_position = std::get<Natural>(result);
+                    natural_position = std::get<AlphaFile::Natural>(result);
                 }
             }
             return natural_position;
@@ -235,7 +223,7 @@ namespace Helix {
             return value;
         }
 
-        void save (FileHelper::File& file) {
+        void save (AlphaFile::BasicFile& file) {
             for (auto& action : data) {
                 action->save(file);
             }
@@ -269,10 +257,10 @@ namespace Helix {
 
     // The reason there is modes is because some actions can't be done reasonably in certain situations.
     struct FileMode {
-        std::optional<Absolute> getStart () const {
+        std::optional<AlphaFile::Absolute> getStart () const {
             return std::nullopt;
         }
-        std::optional<Absolute> getEnd () const {
+        std::optional<AlphaFile::Absolute> getEnd () const {
             return std::nullopt;
         }
         bool supportsInsertion () const {
@@ -293,14 +281,14 @@ namespace Helix {
     /// Does not allow insertion/deletion
     /// Allows full save-as
     struct PartialFileMode : public FileMode {
-        std::optional<Absolute> start;
-        std::optional<Absolute> end;
-        explicit PartialFileMode (std::optional<Absolute> t_start, std::optional<Absolute> t_end=std::nullopt) : start(t_start), end(t_end) {}
+        std::optional<AlphaFile::Absolute> start;
+        std::optional<AlphaFile::Absolute> end;
+        explicit PartialFileMode (std::optional<AlphaFile::Absolute> t_start, std::optional<AlphaFile::Absolute> t_end=std::nullopt) : start(t_start), end(t_end) {}
 
-        std::optional<Absolute> getStart () const {
+        std::optional<AlphaFile::Absolute> getStart () const {
             return start;
         }
-        std::optional<Absolute> getEnd () const {
+        std::optional<AlphaFile::Absolute> getEnd () const {
             return end;
         }
         bool supportsInsertion () const {
@@ -315,9 +303,9 @@ namespace Helix {
     /// Allows insertion/deletion
     /// Allows full save-as
     struct OpenPartialFileMode : public FileMode {
-        std::optional<Absolute> start;
-        explicit OpenPartialFileMode (std::optional<Absolute> t_start) : start(t_start) {}
-        std::optional<Absolute> getStart () const {
+        std::optional<AlphaFile::Absolute> start;
+        explicit OpenPartialFileMode (std::optional<AlphaFile::Absolute> t_start) : start(t_start) {}
+        std::optional<AlphaFile::Absolute> getStart () const {
             return start;
         }
     };
@@ -326,14 +314,14 @@ namespace Helix {
     /// Save-as only saves the part we're editing, nothing else
     /// This is meant for 'spotty' files, which are not allowed to read outside of bounds.
     struct JohnFileMode : public FileMode {
-        std::optional<Absolute> start;
-        std::optional<Absolute> end;
-        explicit JohnFileMode (std::optional<Absolute> t_start, std::optional<Absolute> t_end=std::nullopt) : start(t_start), end(t_end) {}
+        std::optional<AlphaFile::Absolute> start;
+        std::optional<AlphaFile::Absolute> end;
+        explicit JohnFileMode (std::optional<AlphaFile::Absolute> t_start, std::optional<AlphaFile::Absolute> t_end=std::nullopt) : start(t_start), end(t_end) {}
 
-        std::optional<Absolute> getStart () const {
+        std::optional<AlphaFile::Absolute> getStart () const {
             return start;
         }
-        std::optional<Absolute> getEnd () const {
+        std::optional<AlphaFile::Absolute> getEnd () const {
             return end;
         }
         bool supportsInsertion () const {
@@ -353,11 +341,11 @@ namespace Helix {
 
         explicit FileModeInfo (VariantType&& t_mode) : mode(t_mode) {}
 
-        std::optional<Absolute> getStart () const {
+        std::optional<AlphaFile::Absolute> getStart () const {
             return std::visit([] (auto&& x) { return x.getStart(); }, mode);
         }
 
-        std::optional<Absolute> getEnd () const {
+        std::optional<AlphaFile::Absolute> getEnd () const {
             return std::visit([] (auto&& x) { return x.getEnd(); }, mode);
         }
 
@@ -397,11 +385,7 @@ namespace Helix {
 
         protected:
 
-        struct RoundedNatural :
-            ts::strong_typedef<RoundedNatural, Natural>,
-            ts::strong_typedef_op::equality_comparison<RoundedNatural> {
-            using ts::strong_typedef<RoundedNatural, Natural>::strong_typedef;
-        };
+        using RoundedNatural = size_t;
 
         struct Block {
             std::vector<std::byte> data;
@@ -412,7 +396,7 @@ namespace Helix {
 
         std::vector<Block> blocks;
 
-        RoundedNatural getRoundedPosition (Natural position) const;
+        RoundedNatural getRoundedPosition (AlphaFile::Natural position) const;
 
         std::optional<size_t> findBlock (RoundedNatural rounded_position) const;
 
@@ -428,11 +412,11 @@ namespace Helix {
 
         protected:
 
-        File::Constraint file;
+        AlphaFile::ConstrainedFile file;
 
         public:
 
-        explicit Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
+        explicit Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags=AlphaFile::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
 
         explicit Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags);
 
@@ -455,31 +439,31 @@ namespace Helix {
         /// Gets editable size of the file, CACHED
         size_t getCachedEditableSize ();
 
-        std::optional<std::byte> read (Natural position);
-        std::vector<std::byte> read (Natural position, size_t amount);
+        std::optional<std::byte> read (AlphaFile::Natural position);
+        std::vector<std::byte> read (AlphaFile::Natural position, size_t amount);
 
-        std::optional<uint8_t> readU8 (Natural position);
-        std::optional<uint16_t> readU16BE (Natural Position);
-        std::optional<uint16_t> readU16LE (Natural Position);
-        std::optional<uint32_t> readU32BE (Natural Position);
-        std::optional<uint32_t> readU32LE (Natural Position);
-        std::optional<uint64_t> readU64BE (Natural Position);
-        std::optional<uint64_t> readU64LE (Natural Position);
+        std::optional<uint8_t> readU8 (AlphaFile::Natural position);
+        std::optional<uint16_t> readU16BE (AlphaFile::Natural Position);
+        std::optional<uint16_t> readU16LE (AlphaFile::Natural Position);
+        std::optional<uint32_t> readU32BE (AlphaFile::Natural Position);
+        std::optional<uint32_t> readU32LE (AlphaFile::Natural Position);
+        std::optional<uint64_t> readU64BE (AlphaFile::Natural Position);
+        std::optional<uint64_t> readU64LE (AlphaFile::Natural Position);
         // TODO: readU128
-        std::optional<float> readF32BE (Natural Position);
-        std::optional<float> readF32LE (Natural Position);
-        std::optional<double> readF64BE (Natural Position);
-        std::optional<double> readF64LE (Natural Position);
+        std::optional<float> readF32BE (AlphaFile::Natural Position);
+        std::optional<float> readF32LE (AlphaFile::Natural Position);
+        std::optional<double> readF64BE (AlphaFile::Natural Position);
+        std::optional<double> readF64LE (AlphaFile::Natural Position);
 
-        void edit (Natural position, std::byte value, File::EditFlags flags=File::EditFlags());
-        void edit (Natural position, std::vector<std::byte>&& values, File::EditFlags flags=File::EditFlags());
+        void edit (AlphaFile::Natural position, std::byte value);
+        void edit (AlphaFile::Natural position, std::vector<std::byte>&& values);
 
-        void insert (Natural position, size_t amount, std::byte pattern=InsertionAction::insertion_value);
+        void insert (AlphaFile::Natural position, size_t amount, std::byte pattern=InsertionAction::insertion_value);
 
-        void insert (Natural position, size_t amount, const std::vector<std::byte>& pattern);
+        void insert (AlphaFile::Natural position, size_t amount, const std::vector<std::byte>& pattern);
 
         /// Called deletion because delete is a keyword :x
-        void deletion (Natural position, size_t amount);
+        void deletion (AlphaFile::Natural position, size_t amount);
 
         SaveStatus save ();
 
@@ -504,7 +488,7 @@ namespace Helix {
         std::optional<std::pair<std::filesystem::path, std::filesystem::path>> save_generateTempPath (const std::filesystem::path& destination);
 
 
-        std::optional<std::byte> readSingleRaw (Natural pos);
+        std::optional<std::byte> readSingleRaw (AlphaFile::Natural pos);
     };
 
 
@@ -590,7 +574,7 @@ namespace Helix {
         CurrentFile current_file;
         public:
 
-        explicit PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
+        explicit PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags=AlphaFile::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
         explicit PluginHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags);
 
         sol::state& getLua ();
@@ -612,18 +596,18 @@ namespace Helix {
 
         // ====
 
-        void edit (Natural position, std::byte value, File::EditFlags flags=File::EditFlags());
+        void edit (AlphaFile::Natural position, std::byte value);
 
         // TODO: some utility func to turn a list of parameters into a sol::variadic_args
         // remember to look at docs
-        void edit (Natural position, std::vector<std::byte>&& values, File::EditFlags flags=File::EditFlags());
+        void edit (AlphaFile::Natural position, std::vector<std::byte>&& values);
     };
 
 #ifdef HELIX_USE_LUA_GUI
 
     class PluginGUIHelix : public PluginHelix {
         public:
-        explicit PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, File::OpenFlags t_flags=File::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
+        explicit PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags=AlphaFile::OpenFlags(), Flags t_hflags=Flags(WholeFileMode()));
         explicit PluginGUIHelix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags);
 
         protected:
