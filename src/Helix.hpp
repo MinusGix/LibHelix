@@ -34,31 +34,6 @@
 #include "util.hpp"
 
 namespace Helix {
-
-    enum class UndoStatus {
-        // Anythng other than success is some form of failure (or partial failure)
-        // Checks should be done like `if (thing.undo() != UndoStatus::Success) { }`
-        Success = 0,
-        UnknownFailure = 1,
-        // There's nothing to undo
-        Nothing,
-        // The last action can't be undone
-        Unnable,
-        // Undoing/Redoing failed in such a way that the action now has an invalid state.
-        // Bleh.
-        InvalidState,
-    };
-
-    enum class RedoStatus {
-        Success = 0,
-        UnknownFailure = 1,
-        Nothing,
-        Unnable,
-        InvalidState,
-    };
-
-    using ActionStatus = RedoStatus;
-
     struct BaseAction {
         explicit BaseAction () {}
         virtual ~BaseAction () {}
