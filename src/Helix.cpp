@@ -3,51 +3,20 @@
 namespace Helix {
 	// ==== Helix:Constructors ====
 	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, AlphaFile::OpenFlags t_flags, Flags t_hflags) :
-		actions(action_list), block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
+		actions(action_list), file(t_hflags.block_size, t_hflags.max_block_count),
 		mode_info(t_hflags.mode_info) {
-		file.setStart(mode_info.getStart());
-		file.setEnd(mode_info.getEnd());
+		file.getUnderlyingFile().setStart(mode_info.getStart());
+		file.getUnderlyingFile().setEnd(mode_info.getEnd());
 		file.open(t_flags, t_filename);
 	}
 
 	Helix::Helix (MlActions::ActionList& action_list, std::filesystem::path t_filename, Flags t_hflags) :
-		actions(action_list), block_size(t_hflags.block_size), max_block_count(t_hflags.max_block_count),
+		actions(action_list), file(t_hflags.block_size, t_hflags.max_block_count),
 		mode_info(t_hflags.mode_info) {
-		file.setStart(mode_info.getStart());
-		file.setEnd(mode_info.getEnd());
+		file.getUnderlyingFile().setStart(mode_info.getStart());
+		file.getUnderlyingFile().setEnd(mode_info.getEnd());
 		file.open(AlphaFile::OpenFlags(), t_filename);
 	}
-
-
-	// ==== Helix:Blocks ====
-	Helix::RoundedNatural Helix::getRoundedPosition (AlphaFile::Natural position) const {
-		return Helix::RoundedNatural(util::getRoundedPosition(position, block_size));
-	}
-
-	std::optional<size_t> Helix::findBlock (RoundedNatural rounded_position) const {
-		return util::find_one(blocks, [rounded_position] (const Block& b, size_t) {
-			return b.start_position == rounded_position;
-		});
-	}
-
-	bool Helix::hasBlock (RoundedNatural rounded_position) const {
-		return findBlock(rounded_position).has_value();
-	}
-
-	std::optional<size_t> Helix::createBlock (RoundedNatural position) {
-		std::vector<std::byte> bytes = file.read(position, block_size);
-
-		if (bytes.size() == 0) {
-			return std::nullopt;
-		}
-
-		// TODO: remove badly scoring blocks.
-
-		blocks.push_back(Block(position, std::move(bytes)));
-
-		return blocks.size() - 1;
-	}
-
 
 	// ==== Helix:Other ====
 	void Helix::clearCaches () {
@@ -63,7 +32,7 @@ namespace Helix {
 		return actions.getSizeDifference(file.getSize());
 	}
 	size_t Helix::getEditableSize () {
-		return actions.getSizeDifference(file.getEditableSize());
+		return actions.getSizeDifference(file.getUnderlyingFile().getEditableSize());
 	}
 
     size_t Helix::getCachedSize () {
@@ -84,7 +53,7 @@ namespace Helix {
 		if (std::holds_alternative<std::byte>(data)) {
 			return std::get<std::byte>(data);
 		} else {
-			return readSingleRaw(std::get<AlphaFile::Natural>(data));
+			return file.read(std::get<AlphaFile::Natural>(data));
 		}
 	}
 	std::vector<std::byte> Helix::read (AlphaFile::Natural position, size_t amount) {
@@ -244,35 +213,6 @@ namespace Helix {
 		return un.f64;
 	}
 
-	std::optional<std::byte> Helix::readSingleRaw (AlphaFile::Natural pos) {
-		const RoundedNatural rounded_position = getRoundedPosition(pos);
-
-		std::optional<size_t> block_index = findBlock(rounded_position);
-
-		// Create block if it couldn't be found
-		if (!block_index.has_value()) {
-			block_index = createBlock(rounded_position);
-
-			// Couldn't construct the block, so tell them we failed to get it
-			if (!block_index.has_value()) {
-				return std::nullopt;
-			}
-		}
-
-		assert(rounded_position <= pos);
-		/// The position within the block that we desire
-		size_t block_pos = static_cast<size_t>(pos - rounded_position);
-
-		Block& block = blocks[block_index.value()];
-
-		// The position was not within a block. Usually(always?) this happens due to reading past the end of the file.
-		if (block_pos >= block.data.size()) {
-			return std::nullopt;
-		}
-
-		return block.data.at(block_pos);
-	}
-
 	// TODO: should editing clear caches?
 	void Helix::edit (AlphaFile::Natural position, std::byte value) {
 		actions.addAction(std::make_unique<EditAction>(position, std::vector<std::byte>{value}));
@@ -366,7 +306,7 @@ namespace Helix {
 
 	// ==== Helix:Save-Internal ====
 	SaveStatus Helix::save_file_simple () {
-		actions.save(file.getBasicFile());
+		actions.save(file.getUnderlyingFile().getBasicFile());
 		return SaveStatus::Success;
 	}
 
@@ -581,23 +521,6 @@ namespace Helix {
 	}
 
 	void PluginHelix::initLua_Enumerations () {
-		lua.new_enum(
-			"UndoStatus",
-			"Success", UndoStatus::Success,
-			"UnknownFailure", UndoStatus::UnknownFailure,
-			"Nothing", UndoStatus::Nothing,
-			"Unnable", UndoStatus::Unnable,
-			"InvalidState", UndoStatus::InvalidState
-		);
-		lua.new_enum(
-			"RedoStatus",
-			"Success", RedoStatus::Success,
-			"UnknownFailure", RedoStatus::UnknownFailure,
-			"Nothing", RedoStatus::Nothing,
-			"Unnable", RedoStatus::Unnable,
-			"InvalidState", RedoStatus::InvalidState
-		);
-
 		lua.new_enum(
 			"SaveStatus",
 			"Success", SaveStatus::Success,

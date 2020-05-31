@@ -353,33 +353,7 @@ namespace Helix {
     class Helix {
         public:
 
-        const size_t block_size;
-        const size_t max_block_count;
-
         FileModeInfo mode_info;
-
-        protected:
-
-        using RoundedNatural = size_t;
-
-        struct Block {
-            std::vector<std::byte> data;
-            RoundedNatural start_position;
-
-            explicit Block (RoundedNatural t_start, std::vector<std::byte>&& t_data) : data(t_data), start_position(t_start) {}
-        };
-
-        std::vector<Block> blocks;
-
-        RoundedNatural getRoundedPosition (AlphaFile::Natural position) const;
-
-        std::optional<size_t> findBlock (RoundedNatural rounded_position) const;
-
-        bool hasBlock (RoundedNatural rounded_position) const;
-
-        /// Creates a block at the position, doesn't check if it already exists.
-        /// Invalidates all indexes if it returns a value.
-        std::optional<size_t> createBlock (RoundedNatural position);
 
         public:
 
@@ -387,7 +361,7 @@ namespace Helix {
 
         protected:
 
-        AlphaFile::ConstrainedFile file;
+        AlphaFile::BlockCachedFile<AlphaFile::ConstrainedFile> file;
 
         public:
 
@@ -461,9 +435,6 @@ namespace Helix {
         /// generates filenames in the form: [filename].[4 byte hex].tmp
         std::filesystem::path save_generateTempFilename (std::filesystem::path filename);
         std::optional<std::pair<std::filesystem::path, std::filesystem::path>> save_generateTempPath (const std::filesystem::path& destination);
-
-
-        std::optional<std::byte> readSingleRaw (AlphaFile::Natural pos);
     };
 
 
